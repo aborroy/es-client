@@ -14,6 +14,7 @@ import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.http.ssl.SSLContextBuilder;
@@ -43,6 +44,7 @@ public class ElasticsearchClient
     private static final String SERVER_PROTOCOL = "http";
     private static final String SERVER_NAME = "localhost";
     private static final int SERVER_PORT = 9200;
+    private static final String BASE_URL = "/";
 
     // "basic" settings
     private static final String ELASTIC_USER = "elastic";
@@ -51,12 +53,20 @@ public class ElasticsearchClient
     // "https" settings
     private static final String SERVER_PROTOCOL_HTTPS = "https";
     // Use "elastic" user password!
-    private static final String ELASTIC_PASS_HTTPS = "JPMiXciBzCZfpgMNeAxw";
+    private static final String ELASTIC_PASS_HTTPS = "yDxX3tb2G2W0biZDDOqM";
     private static final String CA_CRT_PATH = "/Users/aborroy/Desktop/git/es-client/https/certs/ca/ca.crt";
+
+    // Connection pool
+    private static final int MAX_TOTAL_CONNECTIONS = 30;
+    private static final int MAX_HOST_CONNECTIONS = 30;
+
+    // Timeouts
+    private static final int CONNECTION_TIMEOUT = 1000;
+    private static final int SOCKET_TIMEOUT = 30000;
 
     public static void main(String... args) throws Exception
     {
-        
+
         switch (MODE)
         {
             case "http":
@@ -73,10 +83,25 @@ public class ElasticsearchClient
         }
     }
 
+    private static RequestConfig getRequestConfigBuilder()
+    {
+        return RequestConfig.custom().setConnectTimeout(CONNECTION_TIMEOUT).setSocketTimeout(SOCKET_TIMEOUT).build();
+    }
+
     private static void httpClient() throws Exception
     {
         RestHighLevelClient client = new RestHighLevelClient(
-                RestClient.builder(new HttpHost(SERVER_NAME, SERVER_PORT, SERVER_PROTOCOL)));
+                RestClient.builder(new HttpHost(SERVER_NAME, SERVER_PORT, "http"))
+                        .setHttpClientConfigCallback(new HttpClientConfigCallback()
+                        {
+                            @Override
+                            public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpClientBuilder)
+                            {
+                                return httpClientBuilder.setMaxConnTotal(MAX_TOTAL_CONNECTIONS)
+                                        .setMaxConnPerRoute(MAX_HOST_CONNECTIONS)
+                                        .setDefaultRequestConfig(getRequestConfigBuilder());
+                            }
+                        }).setPathPrefix(BASE_URL));
 
         SearchRequest searchRequest = new SearchRequest();
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
@@ -86,6 +111,7 @@ public class ElasticsearchClient
         SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
 
         System.out.println(searchResponse.getHits().getTotalHits().value);
+
     }
 
     private static void httpBasicAuthClient() throws Exception
@@ -101,7 +127,10 @@ public class ElasticsearchClient
                             @Override
                             public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpClientBuilder)
                             {
-                                return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider);
+                                return httpClientBuilder.setMaxConnTotal(MAX_TOTAL_CONNECTIONS)
+                                        .setMaxConnPerRoute(MAX_HOST_CONNECTIONS)
+                                        .setDefaultRequestConfig(getRequestConfigBuilder())
+                                        .setDefaultCredentialsProvider(credentialsProvider);
                             }
                         }));
 
@@ -139,7 +168,10 @@ public class ElasticsearchClient
                             @Override
                             public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpClientBuilder)
                             {
-                                return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider)
+                                return httpClientBuilder.setMaxConnTotal(MAX_TOTAL_CONNECTIONS)
+                                        .setMaxConnPerRoute(MAX_HOST_CONNECTIONS)
+                                        .setDefaultRequestConfig(getRequestConfigBuilder())
+                                        .setDefaultCredentialsProvider(credentialsProvider)
                                         .setSSLContext(sslContext);
                             }
                         }));
